@@ -1,0 +1,481 @@
+
+---
+title: "Assignment6"
+output: html_document
+author: Rajarshi Choudhury
+---
+
+####1: Download the data set on student achievement in secondary education math education of two Portuguese schools:
+
+
+#####a. Create scatter plots and pairwise correlations between four continuous variables and the final grade (G3) using the pairs.panels() function in R.
+
+```{r}
+stmath <- read.csv("student-mat.csv",sep=";",header=TRUE,stringsAsFactors = TRUE)
+```
+
+Lets first see the structure of the dataset:
+```{r}
+str (stmath)
+```
+
+Now lets first we need to take 4 continuous variable and the final grade. G3 is a compulsory take. G1 and G2 provide good range of values. Absences form the next highest value range, and lets take age as our final take on continuous variables as it cas determine a nice group.
+
+
+Using pairs.panel:
+```{r}
+library(psych)
+pairs.panels(stmath[c(3, 30, 31, 32, 33)])
+```
+
+
+#####b. Build a multiple regression model predicting final math grade (G3) using as many features as you like but you must use at least four. Include at least one categorical variables and be sure to properly convert it to dummy codes. 
+
+First of all we need to decide on the variable selection. G1, G2 are grades and should have good corelation to the final grade. Plus we select, at random :
+Health,
+Trvaltime,
+Studytime,
+Failures,
+Freetime,
+age,
+Dalc,
+Walc
+as other indicators.
+
+Now ideally, we can also use corelation to select. Randomly choosing the features increase entropy of the system, and we will be rearranging it based on backward elimination for question c. 
+
+Now we need to consider a categorical variable: 
+
+Lets consider "Paid" as the categorical variable. We need to use dummy codes for this.
+
+Converting categorical variable to binary indicator (Dummy code)
+
+```{r}
+stmath$dummypaid <- ifelse(stmath$paid == "yes", 1, 0) # Taking yes as 1 and no as 0
+#To check if the code worked:
+stmath$paid[1:5]
+stmath$dummypaid[1:5]
+```
+
+Dividing the model set into training and testing:
+
+```{r}
+library(caret)
+set.seed(1234)
+index <- createDataPartition(y = stmath$G3,p = 0.80,list = FALSE) #using caret package to create data partition.
+training_stmath <- stmath[index,] #creating training set
+testing_stmath <- stmath[-index,] #creating testing set
+#intentionally any datasets are not shown.
+```
+
+Training the model:
+
+```{r}
+m1 <- lm(G3 ~ health + traveltime + studytime + failures + freetime + Dalc + Walc + dummypaid + G1 + G2, data = training_stmath)
+
+#Lets see the summary of the model that is created.
+summary(m1)
+```
+
+
+#####c. Use stepwise backward elimination to remove all non-significant variables and then state the final model as an equation.
+
+
+So we will use stepwise backward elimination method. We will based on the p-value.
+
+First we remove studytime, and then remove others one by one. Our objective is to keep the only the significant p-value. The model is trained on training set only and not the entire dataset. 
+
+```{r}
+m2 <- lm(G3 ~ G1 + traveltime + failures + freetime + Dalc + Walc + dummypaid + G1 + G2, data = training_stmath)
+summary(m2)
+```
+
+```{r}
+m3 <- lm(G3 ~ G1 + traveltime + failures + freetime + Dalc + Walc + dummypaid + G2, data = training_stmath)
+summary(m3)
+```
+
+```{r}
+m4 <- lm(G3 ~ G1 + traveltime + failures + freetime + Dalc + Walc + G2, data = training_stmath)
+summary(m4)
+```
+
+```{r}
+m5 <- lm(G3 ~ traveltime + failures + freetime + G1 + Walc + G2, data = training_stmath)
+summary(m5)
+```
+
+```{r}
+m5 <- lm(G3 ~ traveltime + failures + freetime + G1 + G2, data = training_stmath)
+summary(m5)
+```
+
+```{r}
+m6 <- lm(G3 ~ G1 + failures + freetime + G2, data = training_stmath)
+summary(m6)
+```
+
+```{r}
+m7 <- lm(G3 ~ G1 + failures + freetime + G2, data = training_stmath)
+summary(m7)
+```
+
+```{r}
+m8 <- lm(G3 ~ G1  + failures + G2, data = training_stmath)
+summary(m8)
+```
+
+Now we have a decision to make. What should be the accepted p-value for our feature selection. If we consider 0.05, then we are left with only two features. And again, if we select o.1 is very rarely used and the most accepted p-value is 0.05.
+
+We take the leap to go with 2 feature selection only.
+
+```{r}
+m9 <- lm(G3 ~ failures + G2, data = training_stmath)
+summary(m9)
+```
+
+This is the final model, based on backward elimination using p-value.
+
+
+Now to see how relevant our stepwise development of the model has, lets consider using step for backward elimination, which would consider AIC as method for elimination.
+
+```{r}
+step(lm(training_stmath$G3 ~ training_stmath$health + training_stmath$traveltime + training_stmath$failures + training_stmath$freetime + training_stmath$Dalc + training_stmath$Walc + training_stmath$dummypaid + training_stmath$G1 + training_stmath$G2), direction = "backward")
+```
+
+We see that based on step backaward elimination using AIC, freetime, G1, failures and G2 are selected, which resonates with our model selection where we picked failures and G2 as our model variances with p value limitation of 0.05.
+
+
+#####d:  Calculate the 95% confidence interval for a prediction.
+
+
+Lets calculate the first data in the testing set
+
+```{r}
+G3testpred <- predict(m9,testing_stmath[2,])
+G3testpred
+```
+
+95% CI can be calculated as:
+ Upper limit: 9.706713 + 1.96 * 1.99 (Std error of model: 0.38938) = 13.607113
+ Lower limit: 9.706713 - 1.96 * 1.99 (Std error of model: 0.38938) = 5.806313
+
+
+#####e: What is the RMSE for this model
+
+
+Here, we need to train the model including the entire dataset. As such: 
+
+```{r}
+m11 <- lm(G3 ~ failures + G2, data = stmath)
+summary(m11)
+```
+
+Now to predict the entire dataset:
+
+
+```{r}
+G3_entire_prediction <- predict(m11,stmath)
+#To calculate RMSE: 
+mean_sqrd_error <- mean((m11$residuals)^2) #Finding mean squared error
+root_mean_sqrd_error <- sqrt(mean_sqrd_error) #Finding RMSE
+root_mean_sqrd_error
+```
+
+
+
+
+
+####2: 
+#####a: 
+Adding new column PF, denoting pass-fail:
+```{r}
+stmath["PF"] <- NA
+stmath$PF <- ifelse(stmath$G3 < 10, "F", "P") # new column stores F for Fail when final grade < 10, else pass denpted by P
+#To build dummy code, we weill make a new column, where o is fail, and 1 in pass.
+stmath$PF_dummy <- ifelse(stmath$PF == "P", 1, 0)
+stmath$PF_dummy[1:10]
+```
+
+To check if the code is correct:
+```{r}
+stmath$PF[1:10]
+```
+
+```{r}
+stmath$G3[1:10]
+```
+
+We can see that the code correctly identifies PF, and change it into dummy variable.
+
+Now we need to use this as our response variable.
+
+Now PF_dummy becomes my new response variable.
+
+
+#####b:  Building a binomial logistic regression model classifying a student as passing or failing.
+
+
+Now our variable changes from G3 to PF_dummy. 
+
+Lets us use the same code parameters from question 1 as our initial take. Also, we wont be discarding the dummypaid feature that was created from the categorical variable paid.
+
+We will use the entire dataset for our model.
+
+Here we will use AIC backward elimination by AIC, using step().
+
+```{r}
+step(glm(formula = PF_dummy ~ health + traveltime + studytime + failures + freetime + Dalc + Walc + dummypaid + G1 + G2,family = binomial, data = stmath), direction = "backward")
+
+```
+
+The step() gives out 6 features: studytime, G1, Dalc, traveltime, Walc and G2
+
+These will be by 6 features for the model developed.
+
+Model:
+
+```{r}
+set.seed(123)
+bi_model <- glm(formula = PF_dummy ~ traveltime + studytime + Dalc + Walc + G1 + G2, family = binomial, data = stmath)
+summary(bi_model)
+```
+
+
+#####c: State the regression equation.
+
+
+Regression Equation: f(x) = 1 /( 1 + e ^ - (-20.2193 + 0.5506 * traveltime - 0.4222 * studytime - 0.5068 *  Dalc + 0.4102 * Walc + 0.2387 * G1 + 1.9524 * G2))
+
+
+#####d:accuracy of  model using the entire data set for both training and validation.
+
+
+We have used entire dataset in part b, so we dont need to change the model.
+Lets first predict PF_dummy on the entire dataset.
+
+```{r}
+bimod_predict <-  predict(bi_model, stmath, type = "response")
+bimod_predict[1:10]
+```
+
+Now we find that all the values we get in the predicted model is between 0 and 1. Now, 0 is fail and 1 is pass. So when we are to find accuracy between the PF_dummy which has only two values: 0 and 1, with bimod_predict which has numbers between 0 and 1, we consider all the values greater than 0.5 as true, which denotes Pass, or 1. False corresponds to Fail, or 0.
+
+So we can find the accuracy using table as below:
+
+```{r}
+(table(ActualValue = stmath$PF_dummy , PredictedValue = bimod_predict>0.5))
+```
+
+From the above table, we find the accuracy as: (116 + 250)/395 = 366/395 = 92.658%
+
+
+
+
+#####Question 3: Implement decision tree on white wines.
+
+
+Here our objective is to create a system capable of mimicking expert ratings of wine.
+
+First we load the data:
+
+```{r}
+wine <- read.csv("whitewines.csv") #since nocharacters, hence no stringsAsFactors mentioned
+summary(wine)
+```
+
+We see that the wine data includes 12 features and 4898 observations.
+
+Now let us first examine the distribution of data:
+
+```{r}
+hist(wine$quality)
+```
+
+
+We see that th histogram provides a normal bell curve, where most average around the value of 6. This makes sense intuitively because most wines are of average quality; few are particularly bad or good.
+
+Now we need to divide the data into training and testing set:
+
+```{r}
+wine_train <- wine[1:3750, ] #3750 is near to 76.5% of the overall data
+wine_test <- wine[3751:4898, ]
+wine_train[1:10,]
+
+wine_test[1:10,]
+```
+
+We will begin by training a regression model. We will use rpart() for this.
+
+Using R formula interface, we will specify quality as the outcome variable. We will use the dot notation to allow all other features in the wine_train data frame which we will use as predictors. We will name the resulting regression tree model object m.rpart to differentiate it from the model tree that will be trained later.
+
+```{r}
+library(rpart)
+m.rpart <- rpart(quality ~ ., data = wine_train)
+m.rpart
+```
+
+For each node given in the tree, the number of examples reaching the decision point is listed. For example, all 3,750 examples begin at the root node, of which 2473 have alcohol < 10.85 and 1,277 have alcohol >= 10.85. Since alcohol was used first in the tree, it is the single most important predictor of wine quality.
+
+Nodes indicated by * are terminal or leaf nodes, which means that they result in a prediction. For example, node 5 has a value of 5.881912. When the tree is used for predictions, any wine samples with alcohol < 10.85 and volatile.acidity < 0.2425 would therefore be predicted to have a quality value of 5.88.
+
+A much more  summary of the tree's fit, including the MSE for each of the nodes and overall measure of feature importance is obtained using the summary(m.rpart) command.
+
+```{r}
+summary(m.rpart)
+```
+
+For more readable visualization, we will use the rpart.plot() function.
+
+```{r}
+library(rpart.plot)
+rpart.plot(m.rpart, digits = 3)
+```
+
+Other aspects of the visualization can also be added. The fallen.leaves parameter makes the leaf nodes to be aligned at the bottom of the plot, while the type and extra parameters affect the way decisions and nodes are labeled
+
+```{r}
+rpart.plot(m.rpart, digits = 4, fallen.leaves = TRUE, type = 3, extra = 101)
+```
+
+Now we will use predict function to make predictions on test data using regression tree model. This will return the estimated numeric value for the outcome variable, which we'll save in a vector named p.rpart
+
+```{r}
+p.rpart <- predict(m.rpart, wine_test)
+```
+Lets compare with actual value:
+
+```{r}
+summary(wine_test$quality)
+```
+
+The above summary shows, that while the model decently predict the first and third quartile, it fails in extreme cases.
+
+The correlation between the predicted and actual quality values will provide us a simple way to gauge the model's performance. Usually the cor() function is used to measure the relationship between two equal-length vectors. We'll use this to compare how well the predicted values correspond to the true values:
+
+
+Let's have a quick look at the summary:
+
+```{r}
+summary(p.rpart)
+```
+
+
+
+```{r}
+cor(p.rpart, wine_test$quality)
+```
+
+It is acceptable. Here, the correlation only measures how strongly the predictions are related to the true value; it is not a measure of how far off the predictions were from the true values.
+
+Lets determine Mean Absolute Error (MAE) to get an idea of model performance, which is basically, how far, on average, its prediction was from the true value
+
+As the name suggests, this equation takes the mean of the absolute value of the errors. As the error is just the difference between the predicted values and actual values, we can create a simple MAE() function as shown below:
+
+```{r}
+MAE <- function(actual, predicted) {
+mean(abs(actual - predicted))
+}
+```
+
+The MAE of our prediction is then given by:
+```{r}
+MAE(p.rpart, wine_test$quality)
+```
+
+This implies that, on average, the difference between our model's predictions and the actual quality score was about 0.57. On a quality scale from 0 to 10, this seems to point that our model is doing well.
+
+However most wines are neither good or bad, and mean of it may also give us a rough estimate. Lets measure MAE when mean is taken into account:
+
+Mean:
+```{r}
+mean(wine_train$quality)
+```
+
+MAE:
+```{r}
+MAE(5.886933, wine_test$quality)
+```
+
+Thus we see that our model does very slightly better than when mean is taken into account.
+
+For improving the performance of our learner, let's build a model tree. A model tree improves on regression trees by replacing the leaf nodes with regression models. This usually results in better results than regression trees, which use
+only a single value for prediction at the leaf nodes. 
+
+The current state-of-the-art in model trees is the M5' algorithm (M5-prime) by Y. Wang and I.H. Witten, which is a variant of the original M5 model tree algorithm proposed by J.R. Quinlan in 1992. It is available in RWeka package and M5P() function.
+
+We'll fit the model tree using essentially the same syntax as we used for the regression tree:
+
+```{r}
+library(RWeka)
+m.m5p <- M5P(quality ~ ., data = wine_train)
+m.m5p
+```
+
+The splits are very similar to the regression tree that was built earlier. Alcohol is the most important variable, followed by volatile acidity and free sulfur dioxide. A key difference, however, is that the nodes terminate not in a numeric prediction, but a linear model (shown here as LM1 and such). The values can be interpreted exactly the same as the multiple regression models we built earlier in this chapter. Each number is the net effect of the associated feature on the predicted wine quality.
+
+For statistics on how well the model fits the training data, the summary() function can be applied to the M5P model. It must be noted that as these statistics are based on the training data, they should be used only for rough diagnostics.
+
+```{r}
+summary(m.m5p)
+```
+
+To get a more reasonable model fit, we will use model analysis on unseen test data. Here we need to first predict before we can measure model fit.
+
+```{r}
+p.m5p <- predict(m.m5p, wine_test)
+summary(p.m5p)
+```
+
+It appears that a greater range of values is being successfully predicted in comparison to regression tree.
+
+Lets check correlation and MAE too:
+
+Correlation:
+
+```{r}
+cor(p.m5p, wine_test$quality)
+```
+
+MAE:
+```{r}
+MAE(wine_test$quality, p.m5p)
+```
+
+As a summary, we see that both our Corelation and MAE improved.
+
+
+#####b: Calculate the RMSE for the model.
+
+
+First we need to define a function to calculate RMSE:
+We define the function as:
+
+```{r}
+RMSE <- function(actual_val, predicted_val)
+{
+  sqrt(mean((actual_val - predicted_val)^2))
+}
+```
+
+Now lets pass the parameters for the calculation of RMSE. We will use p.m5p as this has given better result:
+
+RMSE: 
+
+```{r}
+RMSE(wine_test$quality, p.m5p)
+RMSE
+```
+ 
+We find RMSE to be 0.7191548
+
+
+Sources:
+Machine Learning with R - Second Edition
+http://www.stat.columbia.edu/~martin/W2024/R11.pdf
+https://www.statmethods.net/graphs/ 
+https://www.youtube.com/watch?v=xl5dZo_BSJk
+https://www.youtube.com/watch?v=TzhgPXrFSm8&t=434s
+https://en.wikipedia.org/wiki/Logistic_regression
+
+
